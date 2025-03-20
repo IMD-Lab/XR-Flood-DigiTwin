@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
+
 namespace TMRI.Core
 {
     public class GoogleDriveDownloader : MonoBehaviour
@@ -93,9 +94,10 @@ namespace TMRI.Core
                 return null;
             }
 
-            string responseText = request.downloadHandler.text;
+            byte[] downloadAnywayBytes = new byte[] { 68, 111, 119, 110, 108, 111, 97, 100, 32, 97, 110, 121, 119, 97, 121 }; //"Download anyway"
+            //string responseText = request.downloadHandler.text;
 
-            if (responseText.Contains("Download anyway"))
+            if (request.downloadHandler.data.AsSpan().IndexOf(downloadAnywayBytes) >= 0) // If data contains "Download anyway"
             {
                 string formAction = GetFormAction(responseText);
                 string token = GetConfirmationToken(responseText);
@@ -177,21 +179,87 @@ namespace TMRI.Core
             return match.Success ? match.Groups[1].Value : string.Empty;
         }
 
-        private string GetConfirmationToken(string html)
+        //<input type = "hidden" name="confirm" value="t">
+        private string GetConfirmationToken(byte[] html)
         {
-            return GetValueFromHtml(html, @"<input type=""hidden"" name=""confirm"" value=""([^""]+)"">");
+            byte[] Confirmation_pattern = new byte[]{
+                    60, 105, 110, 112, 117, 116, 32, 116, 121, 112, 101, 61, 34, 104, 105, 100, 100, 101, 110, 34,
+                    32, 110, 97, 109, 101, 61, 34, 99, 111, 110, 102, 105, 114, 109, 34, 32, 118, 97, 108, 117, 101, 61, 34
+                };// `<input type="hidden" name="confirm" value="`
+
+            byte[] endPattern1 = new byte[] { 34, 62 }; // `">`
+            return GetValueFromHtmlBytes(html, Confirmation_pattern, endPattern1);
+            //return confirmmation token
         }
 
-        private string GetFormAction(string html)
+        //<form id="download-form" action="https://drive.usercontent.google.com/download" method="get">
+        private string GetFormAction(byte[] html)
         {
-            return GetValueFromHtml(html, @"<form[^>]*id=""download-form""[^>]*action=""([^""]+)""");
+            byte[] FormAction_pattern = new byte[]
+            {
+                60, 102, 111, 114, 109, 32, 105, 100, 61, 34, 100, 111, 119, 110, 108, 111, 97, 100, 45, 102, 111, 114, 109, 34,
+                32, 97, 99, 116, 105, 111, 110, 61, 34 // `<form id="download-form" action="`
+            };
+            byte[] endPattern = new byte[] { 34}; // Find the next `"` before `method="get"`
+            return GetValueFromHtmlBytes(html, FormAction_pattern, endPattern);
+            //return Google Drive Download “https://drive.usercontent.google.com/download”
+        }
+
+        //<input type = "hidden" name="uuid" value="ba35037a-bfe4-443a-b9a8-f8bc068dc4f9">
+        private string GetUUID(byte[] html)
+        {
+            byte[] UUIDpattern = new byte[]
+            {
+                60, 105, 110, 112, 117, 116, 32, 116, 121, 112, 101, 61, 34, 104, 105, 100, 100, 101, 110, 34,
+                32, 110, 97, 109, 101, 61, 34, 117, 117, 105, 100, 34, 32, 118, 97, 108, 117, 101, 61, 34 // `<input type="hidden" name="uuid" value="`
+            };
+            byte[] endPattern = new byte[] { 34, 62 };// ` >" `
+            return GetValueFromHtmlBytes(html, UUIDpattern, endPattern);
+            //return UUID “ba35037a-bfe4-443a-b9a8-f8bc068dc4f9”
         }
 
         private string GetUUID(string html)
         {
-            return GetValueFromHtml(html, @"<input type=""hidden"" name=""uuid"" value=""([^""]+)"">");
+            int startIndex = IndexOfPatternBytes(htmlBytes, pattern);
+            if (startIndex == -1) return string.Empty;
+            startIndex += pattern.Length;
+
+            int endIndex = IndexOfPatternBytes(htmlBytes, endPattern, startIndex);
+            if (endIndex == -1) return string.Empty;
+
+            byte[] valueBytes = new byte[endIndex - startIndex];
+            Array.Copy(htmlBytes, startIndex, valueBytes, 0, endIndex - startIndex);
+
+            return BytesToAsciiString(valueBytes);
         }
 
+        private int IndexOfPatternBytes(byte[] data, byte[] pattern, int start = 0)
+        {
+            for (int i = start; i <= data.Length - pattern.Length; i++)
+            {
+                bool found = true;
+                for (int j = 0; j < pattern.Length; j++)
+                {
+                    if (data[i + j] != pattern[j])
+                    {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found) return i;
+            }
+            return -1;
+        }
+
+        private string BytesToAsciiString(byte[] data)
+        {   //ASCII Decoding the raw byte data to String 
+            char[] chars = new char[data.Length];
+            for (int i = 0; i < data.Length; i++)
+            {
+                chars[i] = (char)data[i];
+            }
+            return new string(chars);
+        }
         private string GetValueFromHtml(string html, string pattern)
         {
             var match = Regex.Match(html, pattern);
