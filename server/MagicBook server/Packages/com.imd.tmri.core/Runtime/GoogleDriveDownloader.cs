@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
-using static UnityEngine.Analytics.IAnalytic;
+
 
 namespace TMRI.Core
 {
@@ -95,10 +95,10 @@ namespace TMRI.Core
                 return null;
             }
 
-            byte[] downloadAnywayBytes = new byte[] { 68, 111, 119, 110, 108, 111, 97, 100, 32, 97, 110, 121, 119, 97, 121 };
+            byte[] downloadAnywayBytes = new byte[] { 68, 111, 119, 110, 108, 111, 97, 100, 32, 97, 110, 121, 119, 97, 121 }; //"Download anyway"
             //string responseText = request.downloadHandler.text;
 
-            if (request.downloadHandler.data.AsSpan().IndexOf(downloadAnywayBytes) >= 0)
+            if (request.downloadHandler.data.AsSpan().IndexOf(downloadAnywayBytes) >= 0) // If data contains "Download anyway"
             {
                 string formAction = GetFormAction(request.downloadHandler.data);
                 string token = GetConfirmationToken(request.downloadHandler.data);
@@ -178,19 +178,21 @@ namespace TMRI.Core
             var match = Regex.Match(url, @"id=([^&]+)");
             return match.Success ? match.Groups[1].Value : string.Empty;
         }
-        
+
+        //<input type = "hidden" name="confirm" value="t">
         private string GetConfirmationToken(byte[] html)
         {
             byte[] Confirmation_pattern = new byte[]{
                     60, 105, 110, 112, 117, 116, 32, 116, 121, 112, 101, 61, 34, 104, 105, 100, 100, 101, 110, 34,
                     32, 110, 97, 109, 101, 61, 34, 99, 111, 110, 102, 105, 114, 109, 34, 32, 118, 97, 108, 117, 101, 61, 34
-                };//GetFormAction
+                };// `<input type="hidden" name="confirm" value="`
 
-            byte[] endPattern1 = new byte[] { 34, 62 };
+            byte[] endPattern1 = new byte[] { 34, 62 }; // `">`
             return GetValueFromHtmlBytes(html, Confirmation_pattern, endPattern1);
-            //return GetValueFromHtml(html, @"<input type=""hidden"" name=""confirm"" value=""([^""]+)"">");
+            //return confirmmation token
         }
 
+        //<form id="download-form" action="https://drive.usercontent.google.com/download" method="get">
         private string GetFormAction(byte[] html)
         {
             byte[] FormAction_pattern = new byte[]
@@ -198,11 +200,12 @@ namespace TMRI.Core
                 60, 102, 111, 114, 109, 32, 105, 100, 61, 34, 100, 111, 119, 110, 108, 111, 97, 100, 45, 102, 111, 114, 109, 34,
                 32, 97, 99, 116, 105, 111, 110, 61, 34 // `<form id="download-form" action="`
             };
-            byte[] endPattern = new byte[] { 34};
+            byte[] endPattern = new byte[] { 34}; // Find the next `"` before `method="get"`
             return GetValueFromHtmlBytes(html, FormAction_pattern, endPattern);
-            //return GetValueFromHtml(html, @"<form[^>]*id=""download-form""[^>]*action=""([^""]+)""");
+            //return Google Drive Download “https://drive.usercontent.google.com/download”
         }
 
+        //<input type = "hidden" name="uuid" value="ba35037a-bfe4-443a-b9a8-f8bc068dc4f9">
         private string GetUUID(byte[] html)
         {
             byte[] UUIDpattern = new byte[]
@@ -210,27 +213,27 @@ namespace TMRI.Core
                 60, 105, 110, 112, 117, 116, 32, 116, 121, 112, 101, 61, 34, 104, 105, 100, 100, 101, 110, 34,
                 32, 110, 97, 109, 101, 61, 34, 117, 117, 105, 100, 34, 32, 118, 97, 108, 117, 101, 61, 34 // `<input type="hidden" name="uuid" value="`
             };
-            byte[] endPattern = new byte[] { 34, 62 };
+            byte[] endPattern = new byte[] { 34, 62 };// ` >" `
             return GetValueFromHtmlBytes(html, UUIDpattern, endPattern);
-            //return GetValueFromHtml(html, @"<input type=""hidden"" name=""uuid"" value=""([^""]+)"">");
+            //return UUID “ba35037a-bfe4-443a-b9a8-f8bc068dc4f9”
         }
 
         private string GetValueFromHtmlBytes(byte[] htmlBytes, byte[] pattern, byte[] endPattern)
         {
-            int startIndex = IndexOf(htmlBytes, pattern);
+            int startIndex = IndexOfPatternBytes(htmlBytes, pattern);
             if (startIndex == -1) return string.Empty;
             startIndex += pattern.Length;
 
-            int endIndex = IndexOf(htmlBytes, endPattern, startIndex);
+            int endIndex = IndexOfPatternBytes(htmlBytes, endPattern, startIndex);
             if (endIndex == -1) return string.Empty;
 
             byte[] valueBytes = new byte[endIndex - startIndex];
             Array.Copy(htmlBytes, startIndex, valueBytes, 0, endIndex - startIndex);
 
-            return BytesToAscii(valueBytes);
+            return BytesToAsciiString(valueBytes);
         }
 
-        private int IndexOf(byte[] data, byte[] pattern, int start = 0)
+        private int IndexOfPatternBytes(byte[] data, byte[] pattern, int start = 0)
         {
             for (int i = start; i <= data.Length - pattern.Length; i++)
             {
@@ -248,8 +251,8 @@ namespace TMRI.Core
             return -1;
         }
 
-        private string BytesToAscii(byte[] data)
-        {
+        private string BytesToAsciiString(byte[] data)
+        {   //ASCII Decoding the raw byte data to String 
             char[] chars = new char[data.Length];
             for (int i = 0; i < data.Length; i++)
             {
